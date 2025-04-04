@@ -1,15 +1,33 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Time
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, String, Integer, Time, ForeignKey, Boolean
+from sqlalchemy.orm import declarative_base, relationship
+
 from database import Base
 
 class Agency(Base):
     __tablename__ = 'agencies'
-    id = Column(String, primary_key=True)
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    agency_id = Column(String, nullable=False)
     name = Column(String, nullable=False)
+    type = Column(String, nullable=False)  # "market" or "shopping_partner"
 
-    # Relationships
-    wraparound_services = relationship("WraparoundService", back_populates="agency")
-    cultural_populations = relationship("CultureServed", back_populates="agency")
+    hours_of_operation = relationship("HoursOfOperation", back_populates="agency", cascade="all, delete-orphan")
+    wraparound_services = relationship("WraparoundService", back_populates="agency", cascade="all, delete-orphan")
+    cultures_served = relationship("CultureServed", back_populates="agency", cascade="all, delete-orphan")
+
+class HoursOfOperation(Base):
+    __tablename__ = 'hours_of_operation'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    agency_id = Column(String, ForeignKey('agencies.id'))
+    day_of_week = Column(String)
+    start_time = Column(Time)
+    end_time = Column(Time)
+    frequency = Column(String)
+    distribution_model = Column(String)
+    food_format = Column(String)
+    appointment_only = Column(Boolean)
+    pantry_requirements = Column(String)
+
+    agency = relationship("Agency", back_populates="hours_of_operation")
 
 class WraparoundService(Base):
     __tablename__ = 'wraparound_services'
@@ -23,19 +41,6 @@ class CultureServed(Base):
     __tablename__ = 'cultures_served'
     id = Column(Integer, primary_key=True, autoincrement=True)
     agency_id = Column(String, ForeignKey('agencies.id'))
-    culture = Column(String)
+    cultures = Column(String)
 
-    agency = relationship("Agency", back_populates="cultural_populations")
-
-class DistributionSite(Base):
-    __tablename__ = 'distribution_sites'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    agency_id = Column(String, ForeignKey('agencies.id'))
-    shipping_address = Column(String)
-    day_of_week = Column(String)
-    start_time = Column(Time)
-    end_time = Column(Time)
-    food_format = Column(String)
-    distribution_model = Column(String)
-
-    agency = relationship("Agency")
+    agency = relationship("Agency", back_populates="cultures_served")

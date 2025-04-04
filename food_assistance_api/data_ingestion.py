@@ -1,52 +1,100 @@
 import pandas as pd
-from sqlalchemy.orm import sessionmaker
-from database import engine, init_db, SessionLocal
-from models import Agency, WraparoundService, CultureServed, DistributionSite
+from datetime import datetime, time
+from models import Agency, HoursOfOperation, WraparoundService, CultureServed
 
-# Initialize database
+from database import init_db, session
+
+# Step 1: Initialize DB (create tables if they don’t exist)
 init_db()
-session = SessionLocal()
 
-# Helper function to load Excel files
-def load_excel(file_path):
-    return pd.read_excel(file_path, engine='openpyxl')  # `openpyxl` is required for `.xlsx` files
+# Helpers
+def parse_time(time_str):
+    """Converts a time string to a `datetime.time` object if valid, otherwise returns None."""
+    if isinstance(time_str, time):  # If it's already a time object, return it
+        return time_str
+    elif isinstance(time_str, str):  # If it's a string, check if it's a valid time
+        time_str = time_str.strip()
+        try:
+            return datetime.strptime(time_str, "%I:%M %p").time()
+        except ValueError:  # If parsing fails, return None (or handle differently)
+            return None
+    else:
+        return None  # Handle unexpected types
 
-# Load Agencies
-agency_data = load_excel("data/CAFB_Markets_HOO.xlsx")
-for _, row in agency_data.iterrows():
-    agency = session.query(Agency).filter_by(id=row["Agency ID"]).first()
-    if not agency:
-        agency = Agency(id=row["Agency ID"], name=row["Agency Name"])
+
+def parse_bool(val):
+    if isinstance(val, str):
+        return val.strip().lower() == 'yes'
+    return bool(val)
+
+# ========== MARKETS ==========
+df_markets_hoo = pd.read_excel('data/CAFB_Markets_HOO.xlsx')
+for _, row in df_markets_hoo.iterrows():
+    agency_id = row['Agency ID']
+    agency_name = row['Agency Name']
+    existing = session.query(Agency).filter_by(id=agency_id).first()
+    if not existing:
+        agency = Agency(agency_id=agency_id, name=agency_name, type='market')
         session.add(agency)
 
-# Load Wraparound Services
-wraparound_data = load_excel("data/CAFB_Markets_Wraparound_Services.xlsx")
-for _, row in wraparound_data.iterrows():
-    service = WraparoundService(agency_id=row["Agency ID"], service=row["Wraparound Service"])
+    hours = HoursOfOperation(
+        agency_id=agency_id,
+        day_of_week=row['Day of Week'],
+        start_time=parse_time(row['Starting Time']),
+        end_time=parse_time(row['Ending Time']),
+        frequency=row['Frequency'],
+        distribution_model=row.get('Distribution Models'),
+        food_format=row.get('Food Format '),
+        pantry_requirements=row.get('Food Pantry Requirements'),
+        appointment_only=None  # No such field in this sheet
+    )
+    session.add(hours)
+
+df_markets_services = pd.read_excel('data/CAFB_Markets_Wraparound_Services.xlsx')
+for _, row in df_markets_services.iterrows():
+    service = WraparoundService(agency_id=row['Agency ID'], service=row['Wraparound Service'])
     session.add(service)
 
-# Load Cultural Populations Served
-culture_data = load_excel("data/CAFB_Markets_Cultures_Served.xlsx")
-for _, row in culture_data.iterrows():
-    for culture in row["Cultural Populations Served"].split(","):
-        culture_entry = CultureServed(agency_id=row["Agency ID"], culture=culture.strip())
-        session.add(culture_entry)
+df_markets_cultures = pd.read_excel('data/CAFB_Markets_Cultures_Served.xlsx')
+for _, row in df_markets_cultures.iterrows():
+    cultures = row['Cultural Populations Served']
+    entry = CultureServed(agency_id=row['Agency ID'], cultures=cultures)
+    session.add(entry)
 
-# Load Distribution Sites
-dist_data = load_excel("data/CAFB_Markets_HOO.xlsx")
-for _, row in dist_data.iterrows():
-    site = DistributionSite(
-        agency_id=row["Agency ID"],
-        shipping_address=row["Shipping Address"],
-        day_of_week=row["Day of Week"],
-        start_time=row["Starting Time"],
-        end_time=row["Ending Time"],
-        food_format=row.get("Food Format", None),
-        distribution_model=row.get("Distribution Models", None)
+# ========== SHOPPING PARTNERS ==========
+df_sp_hoo = pd.read_excel('data/CAFB_Shopping_Partners_HOO.xlsx')
+for _, row in df_sp_hoo.iterrows():
+    agency_id = row['External ID']
+    agency_name = row['Name']
+    existing = session.query(Agency).filter_by(id=agency_id).first()
+    if not existing:
+        agency = Agency(agency_id=agency_id, name=agency_name, type='shopping_partner')
+        session.add(agency)
+
+    hours = HoursOfOperation(
+        agency_id=agency_id,
+        day_of_week=row['Day of Week'],
+        start_time=parse_time(row['Starting Time']),
+        end_time=parse_time(row['Ending Time']),
+        frequency=row['Monthly Options'],
+        appointment_only=parse_bool(row['By Appointment Only']),
+        pantry_requirements=row.get('Food Pantry Requirements'),
+        distribution_model=row.get('Distribution Models'),
+        food_format=row.get('Food Format ')
     )
-    session.add(site)
+    session.add(hours)
 
-# Commit changes
+df_sp_services = pd.read_excel('data/CAFB_Shopping_Partners_Wraparound_Services.xlsx')
+for _, row in df_sp_services.iterrows():
+    service = WraparoundService(agency_id=row['Agency ID'], service=row['Wraparound Service'])
+    session.add(service)
+
+df_sp_cultures = pd.read_excel('data/CAFB_Shopping_Partners_Cultures_Served.xlsx')
+for _, row in df_sp_cultures.iterrows():
+    cultures = row['Cultural Populations Served']
+    entry = CultureServed(agency_id=row['Agency ID'], cultures=cultures)
+    session.add(entry)
+
+# Commit everything
 session.commit()
 session.close()
-print("✅ Data Ingestion Completed!")
