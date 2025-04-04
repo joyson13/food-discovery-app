@@ -6,9 +6,7 @@ from food_assistance_api.routes import api_blueprint  # Importing routes
 app = Flask(__name__, template_folder="templates")
 
 # Configure database (Example: SQLite)
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///food_assistance.db"
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
+app.config.from_pyfile('config.py')
 # Initialize database tables
 init_db()
 

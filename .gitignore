@@ -2,4 +2,6 @@
 /Scripts
 /Include
 /Lib
-pyenv.cfg
+pyvenv.cfg
+/food_assistance_api/config.py
+/food_assistance_api/__pycache__/

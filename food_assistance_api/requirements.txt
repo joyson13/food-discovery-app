@@ -4,3 +4,4 @@ flask-sqlalchemy
 pandas
 openpyxl
 geopy
+requests

@@ -19,7 +19,7 @@ def get_agencies():
 def get_agency(agency_id):
     agency = session.query(Agency).filter_by(agency_id=agency_id).first()
     if agency:
-        return jsonify({"agency id": agency.agency_id, "name": agency.name, "type": agency.type})
+        return jsonify({"agency id": agency.agency_id, "name": agency.name, "type": agency.type, "Shipping address": agency.address, "phone": agency.phone})
     return jsonify({"error": "Agency not found"}), 404
 
 # Landing Page Route

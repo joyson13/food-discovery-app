@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, Time, ForeignKey, Boolean
+from sqlalchemy import Column, String, Integer, Float, Time, ForeignKey, Boolean
 from sqlalchemy.orm import declarative_base, relationship
 
 from database import Base
@@ -9,6 +9,10 @@ class Agency(Base):
     agency_id = Column(String, nullable=False)
     name = Column(String, nullable=False)
     type = Column(String, nullable=False)  # "market" or "shopping_partner"
+    address = Column(String)
+    phone = Column(String)
+    latitude = Column(Float)  # Add this
+    longitude = Column(Float)  # Add this
 
     hours_of_operation = relationship("HoursOfOperation", back_populates="agency", cascade="all, delete-orphan")
     wraparound_services = relationship("WraparoundService", back_populates="agency", cascade="all, delete-orphan")
