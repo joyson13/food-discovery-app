@@ -4,6 +4,8 @@ from food_assistance_api.models import Agency
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 
+from config import API_KEY
+
 # Create a Flask Blueprint (modular route handling)
 api_blueprint = Blueprint("api", __name__)
 
@@ -25,7 +27,7 @@ def get_agency(agency_id):
 # Landing Page Route
 @api_blueprint.route("/", methods=["GET"])
 def landing_page():
-    return render_template("index.html")  # Render landing page
+    return render_template("index.html", api_key=API_KEY)  # Render landing page
 
 # Search API: Find agencies near a given location
 @api_blueprint.route("/search", methods=["GET"])

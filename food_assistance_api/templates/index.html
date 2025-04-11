@@ -6,23 +6,33 @@
     <title>Food Assistance Locator</title>
     
     <!-- Google Maps API (Replace YOUR_API_KEY) -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDuG-5uLRNqwrV6jji8GU0s-ytsCRb_-RU&callback=initMap" async defer></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key={{ api_key }}&callback=initMap" async defer></script>
 
-    <style>
-        #map {
-            height: 500px;
-            width: 100%;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css')}}">
 </head>
 <body>
     <h1>Find Food Assistance Centers Near You</h1>
 
-    <input type="text" id="search-box" placeholder="Enter address or ZIP code">
-    <input type="number" id="radius" placeholder="Radius (miles)" value="5">
-    <button onclick="searchLocations()">Search</button>
+    <div class="flex-container">
+        <div class="flex-item">
+            <input type="text" id="search-box" placeholder="Enter address or ZIP code">
+            <input type="number" id="radius" placeholder="Radius (miles)" value="5">
+            <button onclick="searchLocations()">Search</button>
 
-    <div id="map"></div>
+            <div id="map"></div>
+        </div>
+
+        <div class="flex-item">
+            <h2>Box 2</h2>
+        </div>
+        
+        <div class="flex-item">
+            <h2>Box 3</h2>
+        </div>
+        
+        <div class="flex-item">
+            <h2>Box 4</h2>
+        </div>
 
     <script>
         let map;
