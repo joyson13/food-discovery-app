@@ -5,3 +5,5 @@ pandas
 openpyxl
 geopy
 requests
+flask-cors
+pydantic
