@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify, render_template, Flask
-from food_assistance_api.database import session
-from food_assistance_api.models import Agency, HoursOfOperation, WraparoundService, CultureServed
+from database import session
+from models import Agency, HoursOfOperation, WraparoundService, CultureServed
 from sqlalchemy.orm import aliased
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
