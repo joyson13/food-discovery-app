@@ -1,7 +1,8 @@
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template, Flask
 from food_assistance_api.database import session
 from food_assistance_api.models import Agency, HoursOfOperation, WraparoundService, CultureServed
 from sqlalchemy.orm import aliased
+from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 import logging
 import json
@@ -10,9 +11,11 @@ from pydantic import BaseModel, ValidationError
 from typing import List, Dict, Union
 from config import API_KEY
 from datetime import datetime
+# from vapi_python import Vapi
 
 api_blueprint = Blueprint("api", __name__)
 
+# vapi = Vapi(api_key="5f2acde3-9ffb-46c7-ac07-ab4628e52146")
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
@@ -53,18 +56,49 @@ def generate_voice_summary(agencies, day_of_week):
     summary = f"I found {len(agencies)} food site{'s' if len(agencies) > 1 else ''} near you for {day_of_week}. "
 
     for agency in agencies:
-        name = agency['name'].split(':')[0].strip()
+        name = agency['name'].split(':')[1].strip() if ':' in agency['name'] else agency['name']
         address = agency['address'].replace("Attn:", "").strip()
         start_time = format_time_12hr(agency['start_time']) if agency['start_time'] else None
         end_time = format_time_12hr(agency['end_time']) if agency['end_time'] else None
+        appointment = "Appointments are required" if agency.get('appointment_only') else "Walk-ins are welcome"
+        cultures = f"Serves: {', '.join(agency['cultures_served'])}" if agency.get('cultures_served') else None
+        distance = f"about {agency['distance']} miles away" if agency.get('distance') else None
+        model = agency.get('distribution_model')
+        food_format = agency.get('food_format')
+        frequency = agency.get('frequency')
+        requirements = agency.get('pantry_requirements')
+        phone = agency.get('phone')
+        wraparound = agency.get('wraparound_services')
 
-
+        # Time phrase
         if start_time and end_time:
             time_phrase = f"open from {start_time} to {end_time}"
         else:
             time_phrase = "operating hours are currently not available"
 
-        summary += f"{name} located at {address}, {time_phrase}. "
+        # Conversational extras summary
+        extras_sentences = []
+
+        if distance:
+            extras_sentences.append(f"It's about {agency['distance']} miles away.")
+        if model:
+            extras_sentences.append(f"It's a {model.lower()} site.")
+        if food_format:
+            extras_sentences.append(f"They offer {food_format.lower()}.")
+        if frequency:
+            extras_sentences.append(f"This site operates {frequency.lower()}.")
+        if requirements:
+            extras_sentences.append("You may need an ID or meet other requirements.")
+        if cultures:
+            extras_sentences.append(f"This site serves communities including {', '.join(agency['cultures_served'])}.")
+        if wraparound:
+            extras_sentences.append("Wraparound services are also available.")
+        if phone:
+            extras_sentences.append(f"If you have questions, you can call them at {phone}.")
+
+        extras_phrase = " ".join(extras_sentences)
+
+        summary += f"{name}, located at {address}, is {time_phrase}. {appointment}. {extras_phrase}. "
 
     summary += "Would you like directions or to hear more options?"
     return summary
@@ -98,34 +132,47 @@ def get_agency(agency_id):
 
 @api_blueprint.route("/search", methods=["GET"])
 def search_agencies():
-    from geopy.geocoders import Nominatim
+    address = request.args.get("address")  # Get address or ZIP code
+    radius = float(request.args.get("radius", 5))  # Default radius = 5 miles
+    lat = request.args.get("lat")  # If user selects to filter from their current location
+    lng = request.args.get("lng") # If user selects to filter from their current location
+    
+    
+    # if not address:
+    #     return jsonify({"error": "Address is required"}), 400
 
-    address = request.args.get("address")
-    radius = float(request.args.get("radius", 5))
 
-    if not address:
-        return jsonify({"error": "Address is required"}), 400
+    # geolocator = Nominatim(user_agent="food_assistance_locator")
+    # location = geolocator.geocode(address, country_codes="us") # Limit to US locations
+    
+    if address:
+         # Convert address(zipcode to be precise) to lat/lon 
+        geolocator = Nominatim(user_agent="food_assistance_locator")
+        location = geolocator.geocode(address,  country_codes="us") # Limit to US locations 
+        if not location:
+            return jsonify({"error": "Location not found"}), 404
+        user_coords = (location.latitude, location.longitude)
+    elif lat and lng: # If user gave the site their current location
+        user_coords = (float(lat), float(lng))    
+    else:
+        return jsonify({"error": "Address or coordinates are required"}), 400
 
-    geolocator = Nominatim(user_agent="food_assistance_locator")
-    location = geolocator.geocode(address)
-
-    if not location:
-        return jsonify({"error": "Location not found"}), 404
-
-    user_coords = (location.latitude, location.longitude)
+    # Query agencies from database
     agencies = session.query(Agency).all()
-
     nearby_agencies = []
+
     for agency in agencies:
         agency_coords = (agency.latitude, agency.longitude)
-        distance = geodesic(user_coords, agency_coords).miles
+        distance = geodesic(user_coords, agency_coords).miles  # Calculate distance
+
         if distance <= radius:
             nearby_agencies.append({
                 "id": agency.id,
                 "name": agency.name,
                 "latitude": agency.latitude,
                 "longitude": agency.longitude,
-                "distance": round(distance, 2)
+                "distance": round(distance, 2),
+                "phone": agency.phone if agency.phone else "No phone number available"
             })
 
     return jsonify(nearby_agencies)
@@ -267,3 +314,51 @@ def vapi_tool_handler():
         logging.error(f"Exception in /vapi_expertquery: {e}")
         return jsonify({"error": str(e)}), 500
 
+# # Start the call
+# @api_blueprint.route('/start_call', methods=["POST"])
+# def start_call():
+#     try:
+#         vapi.start(assistant_id='df71a9ab-c83c-4497-adbd-6fb95f01f8eb')
+#         return jsonify({"status": "call started"}), 200
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+# # Stop the call
+# @api_blueprint.route('/stop_call', methods=["POST"])
+# def stop_call():
+#     try:
+#         vapi.stop()
+#         return jsonify({"status": "call stopped"}), 200
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+    
+
+@api_blueprint.route('/outbound', methods=['POST'])
+def outbound_route():
+    data = request.get_json()  # Extract data from the request body
+
+    try:
+        response = requests.post(
+            "https://api.vapi.ai/call/phone",
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": "5f2acde3-9ffb-46c7-ac07-ab4628e52146",  # Replace with your actual API key
+            },
+            json={
+                "phoneNumberId": "417409c8-9a0e-4d2e-87ed-c9665557832c",
+                "assistantId": "df71a9ab-c83c-4497-adbd-6fb95f01f8eb",
+                "customer": {
+                    "number": "+12403540561",  # Replace with the actual phone number
+                },
+            },
+        )
+
+        response.raise_for_status()
+        return jsonify(response.json()), 200  # Send the response data as JSON
+    except requests.exceptions.RequestException as error:
+        return jsonify(
+            {
+                "message": "Failed to place outbound call",
+                "error": str(error),
+            }
+        ), 500  # Handle errors
