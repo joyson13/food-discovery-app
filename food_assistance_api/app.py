@@ -16,4 +16,4 @@ init_db()
 app.register_blueprint(api_blueprint)
 
 if __name__ == "__main__":
-    app.run(debug=True)  # Start the Flask server
+    app.run(host="0.0.0.0", debug=True)
