@@ -213,10 +213,11 @@
               position: { lat: site.latitude, lng: site.longitude },
               map: map,
               title: site.name,
+              phone: site.phone
             });
 
             const info = new google.maps.InfoWindow({
-              content: `<strong>${site.name}</strong><br>${site.distance} mi away`
+              content: `<strong>${site.name}</strong><br>${site.distance} mi away <br>Phone: ${site.phone}<br><button onclick="navigateTo(${site.latitude}, ${site.longitude})">Get Directions</button>`
             });
 
             marker.addListener("click", () => info.open(map, marker));
@@ -243,16 +244,26 @@
               position: { lat: site.latitude, lng: site.longitude },
               map: map,
               title: site.name,
+              phone: site.phone
             });
 
             const info = new google.maps.InfoWindow({
-              content: `<strong>${site.name}</strong><br>${site.distance} mi away`
+              content: `<strong>${site.name}</strong><br>${site.distance} mi away <br>Phone: ${site.phone}<br><button onclick="navigateTo(${site.latitude}, ${site.longitude})">Get Directions</button>`
             });
 
             marker.addListener("click", () => info.open(map, marker));
             markers.push(marker);
           });
         });
+    }
+
+    function navigateTo(lat, lng) {
+      const base = "https://www.google.com/maps/dir/?api=1";
+      navigator.geolocation.getCurrentPosition(pos => {
+        const origin = `${pos.coords.latitude},${pos.coords.longitude}`;
+        const destination = `${lat},${lng}`;
+        window.open(`${base}&origin=${origin}&destination=${destination}&travelmode=driving`);
+      });
     }
   </script>
 
