@@ -1,7 +1,5 @@
 from flask import Blueprint, request, jsonify, render_template, Flask
-from database import session
-from models import Agency, HoursOfOperation, WraparoundService, CultureServed
-from sqlalchemy.orm import aliased
+from database import get_connection
 from geopy.geocoders import Nominatim
 from geopy.distance import geodesic
 import logging
@@ -113,13 +111,25 @@ def landing_page():
 
 @api_blueprint.route("/agencies", methods=["GET"])
 def get_agencies():
-    agencies = session.query(Agency).all()
-    agency_list = [{"id": agency.id, "name": agency.name} for agency in agencies]
-    return jsonify(agency_list)
+    try:
+        conn = get_connection()
+        cursor = conn.execute("SELECT DISTINCT agency_id, name FROM agencies;")
+        agencies = [{"id": row[0], "name": row[1]} for row in cursor.fetchall()]
+        conn.close()
+        return jsonify(agencies)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 @api_blueprint.route("/agencies/<string:agency_id>", methods=["GET"])
 def get_agency(agency_id):
-    agency = session.query(Agency).filter_by(agency_id=agency_id).first()
+    
+    conn = get_connection()
+    cursor = conn.cursor()
+    
+    agency = cursor.execute("SELECT * FROM agencies WHERE agency_id = ?", (agency_id,))
+    
+    conn.close()
     if agency:
         return jsonify({
             "agency_id": agency.agency_id,
@@ -156,23 +166,29 @@ def search_agencies():
         user_coords = (float(lat), float(lng))    
     else:
         return jsonify({"error": "Address or coordinates are required"}), 400
+    
+    conn = get_connection()
+    cursor = conn.cursor()
 
-    # Query agencies from database
-    agencies = session.query(Agency).all()
+    # This query retrieves all necessary agency data with joins
+    agencies = cursor.execute("""SELECT agency_id, name, type, phone, latitude, longitude FROM agencies""")
+    conn.close()
+    
     nearby_agencies = []
 
     for agency in agencies:
-        agency_coords = (agency.latitude, agency.longitude)
+        agency_id, name, address, phone, latitude, longitude = agency  # unpack tuple
+        agency_coords = (latitude, longitude)
         distance = geodesic(user_coords, agency_coords).miles  # Calculate distance
 
         if distance <= radius:
             nearby_agencies.append({
-                "id": agency.id,
-                "name": agency.name,
-                "latitude": agency.latitude,
-                "longitude": agency.longitude,
+                "id": agency_id,
+                "name": name,
+                "latitude": latitude,
+                "longitude": longitude,
                 "distance": round(distance, 2),
-                "phone": agency.phone if agency.phone else "No phone number available"
+                "phone": phone if phone else "No phone number available"
             })
 
     return jsonify(nearby_agencies)
@@ -184,57 +200,71 @@ def search_agencies():
 @api_blueprint.route("/expertquery", methods=["GET"])
 def get_filtered_agencies():
     try:
-        address = request.args.get('address')
+        address = request.args.get("address")
+        day_of_week = request.args.get("day_of_week")
+        max_distance = float(request.args.get("max_distance", 5.0))
+
         user_lat, user_lon = get_lat_lon(address)
-        day_of_week = request.args.get('day_of_week')
-        max_distance = float(request.args.get('max_distance', 5.0))
+        if not user_lat or not user_lon:
+            return jsonify({"error": "Invalid location"}), 400
 
-        agency_alias = aliased(Agency)
-        hoop_alias = aliased(HoursOfOperation)
-        wrap_alias = aliased(WraparoundService)
-        culture_alias = aliased(CultureServed)
+        conn = get_connection()
+        cursor = conn.cursor()
 
-        query = session.query(agency_alias, hoop_alias, wrap_alias, culture_alias).\
-            join(hoop_alias, agency_alias.agency_id == hoop_alias.agency_id).\
-            join(wrap_alias, agency_alias.agency_id == wrap_alias.agency_id).\
-            join(culture_alias, agency_alias.agency_id == culture_alias.agency_id)
-
-        all_agencies = query.all()
+        # This query retrieves all necessary agency data with joins
+        cursor.execute("""
+            SELECT a.agency_id, a.name, a.type, a.address, a.phone, a.latitude, a.longitude,
+                   h.day_of_week, h.start_time, h.end_time, h.frequency,
+                   h.distribution_model, h.food_format, h.appointment_only, h.pantry_requirements,
+                   w.service, c.cultures
+            FROM agencies a
+            JOIN hours_of_operation h ON a.agency_id = h.agency_id
+            LEFT JOIN wraparound_services w ON a.agency_id = w.agency_id
+            LEFT JOIN cultures_served c ON a.agency_id = c.agency_id
+            WHERE lower(h.day_of_week) = ?
+        """, (day_of_week.lower(),))
 
         agency_map = {}
 
-        for agency, hours, wrap, culture in all_agencies:
-            if hours.day_of_week and hours.day_of_week.lower() == day_of_week.lower():
-                distance = calculate_distance(user_lat, user_lon, agency.latitude, agency.longitude)
-                if distance <= max_distance:
-                    aid = agency.agency_id
-                    if aid not in agency_map:
-                        agency_map[aid] = {
-                            "id": aid,
-                            "name": agency.name,
-                            "type": agency.type,
-                            "address": agency.address,
-                            "phone": agency.phone,
-                            "distance": distance,
-                            "day_of_week": hours.day_of_week,
-                            "start_time": hours.start_time.isoformat() if hours.start_time else None,
-                            "end_time": hours.end_time.isoformat() if hours.end_time else None,
-                            "frequency": hours.frequency,
-                            "distribution_model": hours.distribution_model,
-                            "food_format": hours.food_format,
-                            "appointment_only": bool(hours.appointment_only),
-                            "pantry_requirements": hours.pantry_requirements,
-                            "wraparound_services": set(),
-                            "cultures_served": set()
-                        }
+        for row in cursor.fetchall():
+            (
+                aid, name, typ, address, phone, lat, lon,
+                dow, start, end, freq, model, fmt, appt, pantry,
+                service, culture
+            ) = row
 
-                    # Accumulate services and cultures
-                    if wrap and wrap.service:
-                        agency_map[aid]["wraparound_services"].add(wrap.service)
-                    if culture and culture.cultures:
-                        agency_map[aid]["cultures_served"].add(culture.cultures)
+            distance = calculate_distance(user_lat, user_lon, lat, lon)
+            if distance > max_distance:
+                continue
 
-        # Finalize results and convert sets to lists
+            if aid not in agency_map:
+                agency_map[aid] = {
+                    "id": aid,
+                    "name": name,
+                    "type": typ,
+                    "address": address,
+                    "phone": phone,
+                    "latitude": lat,
+                    "longitude": lon,
+                    "distance": round(distance, 2),
+                    "day_of_week": dow,
+                    "start_time": start,
+                    "end_time": end,
+                    "frequency": freq,
+                    "distribution_model": model,
+                    "food_format": fmt,
+                    "appointment_only": bool(appt),
+                    "pantry_requirements": pantry,
+                    "wraparound_services": set(),
+                    "cultures_served": set()
+                }
+
+            if service:
+                agency_map[aid]["wraparound_services"].add(service)
+            if culture:
+                agency_map[aid]["cultures_served"].add(culture)
+
+        # Final cleanup and formatting
         result = []
         for agency in agency_map.values():
             agency["wraparound_services"] = list(agency["wraparound_services"])
@@ -242,11 +272,12 @@ def get_filtered_agencies():
             result.append(agency)
 
         result.sort(key=lambda x: x["distance"])
+        conn.close()
         return jsonify(result), 200
 
     except Exception as e:
-        logging.error(f"Error in /expertquery: {str(e)}")
-        return jsonify({"error": str(e)}), 400
+        logging.error(f"Expert Query Error: {e}")
+        return jsonify({"error": str(e)}), 500
 
 
 # ----------------------------
