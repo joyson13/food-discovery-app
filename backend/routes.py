@@ -501,3 +501,75 @@ def outbound_route():
                 "error": str(error),
             }
         ), 500  # Handle errors
+        
+        
+@api_blueprint.route('/on_call_end', methods=['POST']) 
+def on_call_end():
+    try:
+        data = request.get_json()
+        data = data.get("message").get("toolCalls")[0].get("function").get("arguments")
+        call_id = data.get("call_id")
+        site_rating = data.get("site_feedback")
+        agent_rating = data.get("agent_feedback")
+
+        if not call_id:
+            return jsonify({"error": "Missing call_id"}), 400
+        
+        if not site_rating:
+            return jsonify({"error": "Missing site_rating"}), 400
+        
+        if not agent_rating:
+            return jsonify({"error": "Missing agent_rating"}), 400
+        
+        print("Received call end event:", data)
+        return jsonify({"message": "Call end event received"}), 200
+
+        # # Fetch call details from VAPI
+        # response = requests.get(
+        #     f"https://api.vapi.ai/call/{call_id}",
+        #     headers={"Authorization": "Bearer YOUR_VAPI_API_KEY"}
+        # )
+        # if response.status_code != 200:
+        #     return jsonify({"error": "Failed to fetch VAPI data"}), 502
+
+        # call_data = response.json()
+
+        # # Extract fields
+        # call_type = call_data.get("type")
+        # user_phone = call_data.get("customer", {}).get("number")
+        # summary = call_data.get("analysis", {}).get("summary")
+        # recording_url = call_data.get("recordingUrl")
+        # stereo_recording_url = call_data.get("stereoRecordingUrl")
+        # call_time = call_data.get("createdAt")
+        # duration = call_data.get("duration")
+        # messages = json.dumps(call_data.get("messages", []), indent=2)
+
+        # # Convert time
+        # call_time = datetime.fromisoformat(call_time.replace("Z", "+00:00"))
+
+        # conn = get_connection()
+        # cursor = conn.cursor()
+
+        # # Check if already exists
+        # cursor.execute("SELECT 1 FROM call_logs WHERE call_id = ?", (call_id,))
+        # if cursor.fetchone():
+        #     return jsonify({"message": "Call already logged"}), 200
+
+        # # Insert log
+        # cursor.execute("""
+        #     INSERT INTO call_logs (
+        #         call_id, type, user_phone, site_rating, agent_rating,
+        #         summary, recording_url, stereo_recording_url,
+        #         call_time, call_duration, messages
+        #     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        # """, (
+        #     call_id, call_type, user_phone, site_rating, agent_rating,
+        #     summary, recording_url, stereo_recording_url,
+        #     call_time, duration, messages
+        # ))
+
+        # conn.commit()
+        # return jsonify({"message": "Call log recorded"}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
