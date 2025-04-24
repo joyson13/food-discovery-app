@@ -1,0 +1,66 @@
+.agent-info {
+  margin-top: 30px;
+  font-size: 14px;
+  background: #eef4ff;
+  padding: 15px;
+  border-left: 4px solid #007BFF;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.vapi-buttons {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+}
+
+.vapi-buttons button {
+  flex: 1;
+  padding: 12px;
+  font-size: 14px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+#call-btn {
+  background-color: #28a745;
+  color: white;
+}
+
+#call-btn:hover {
+  background-color: #218838;
+}
+
+#hangup-btn {
+  background-color: #dc3545;
+  color: white;
+}
+
+#hangup-btn:hover {
+  background-color: #c82333;
+}
+
+.agent-status {
+  margin-top: 10px;
+  font-weight: bold;
+}
+
+.volume-bars {
+  margin-top: 10px;
+  display: flex;
+  height: 10px;
+  gap: 3px;
+}
+
+.bar {
+  flex: 1;
+  background-color: #ddd;
+  transition: background-color 0.2s;
+  border-radius: 2px;
+}
+
+.bar.active {
+  background-color: #007BFF;
+}
